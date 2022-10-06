@@ -1,55 +1,76 @@
 ﻿// See https://aka.ms/new-console-template for more information
+
 using Discord;
 using Discord.WebSocket;
 using Feint.Core.Models;
+using Feint.Core.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Serilog;
 
 namespace Feint.Core
 {
     public class Program
     {
-        public IConfiguration config = new ConfigurationBuilder()
-            .SetBasePath(Directory.GetCurrentDirectory())
-            .AddEnvironmentVariables()
-            .AddJsonFile("secrets.json")
-            .Build();
-
-        public static Task Main() => new Program().MainAsync();
-
-        public async Task MainAsync()
+        private static IHostBuilder CreateHostBuilder()
         {
-            using IHost host = Host.CreateDefaultBuilder()
-                .ConfigureServices((_, services) => services.AddSingleton(x => new DiscordSocketClient(new DiscordSocketConfig
+            var builder = Host.CreateDefaultBuilder();
+
+            // Setup default json config -- always set this up first.
+            builder.ConfigureAppConfiguration((context, configBuilder) =>
+            {
+                configBuilder.AddJsonFile("secrets.json", false, true);
+            });
+
+            // Configure logging.
+            builder.ConfigureLogging((context, logging) =>
+            {
+                Log.Logger = new LoggerConfiguration()
+                    .MinimumLevel.Information()
+                    .WriteTo.Console()
+                    .WriteTo.File("log.txt",
+                    rollingInterval: RollingInterval.Day,
+                    rollOnFileSizeLimit: true)
+                    .CreateLogger();
+
+                // Clear default providers -- console, event log, etc.
+                logging.ClearProviders();
+
+                // Now only using Serilog as our default logger.
+                // dispose: true, allow Serilog to be disposed of by the Host.
+                logging.AddSerilog(dispose: true);
+            });
+
+            // Setup Discord Singleton.
+            builder.ConfigureServices((context, services) =>
+            {
+                services.Configure<DiscordSettings>(context.Configuration.GetSection("Discord"));
+
+                services.AddSingleton(x => new DiscordSocketClient(new DiscordSocketConfig
                 {
                     GatewayIntents = GatewayIntents.AllUnprivileged,
                     AlwaysDownloadUsers = true
-                })))
-                .Build();
+                }));
 
-            await RunAsync(host);
+                // Let the host manage this service -- it controls the StartAsync, StopAsync, and ExecuteAsync.
+                // StartAsync is meant for setup.
+                // ExecuteASync is meant for body.
+                // StopAsync is meant for stopping/ending/disposing.
+                services.AddHostedService<DiscordBotService>();
+            });
+
+            return builder;
         }
 
-        public async Task RunAsync(IHost host)
+        public static void Main()
         {
-            DiscordSettings settings = config.GetRequiredSection("Discord").Get<DiscordSettings>();
+            // Application
+            AppException.Install();
 
-            using IServiceScope serviceScope = host.Services.CreateScope();
-            IServiceProvider provider = serviceScope.ServiceProvider;
-
-            var _client = provider.GetRequiredService<DiscordSocketClient>();
-            _client.Log += async (LogMessage msg) => { Console.WriteLine(msg.Message); };
-
-            _client.Ready += async () =>
-            {
-                Console.WriteLine("Bot ready!");
-            };
-
-            await _client.LoginAsync(TokenType.Bot, settings.BotToken);
-            await _client.StartAsync();
-
-            await Task.Delay(-1);
+            var host = CreateHostBuilder().Build();
+            host.Run();
         }
     }
 }
