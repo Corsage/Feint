@@ -10,5 +10,8 @@ namespace Feint.Core.Models
     public class DiscordSettings
     {
         public string BotToken { get; set; }
+        public string BotPrefix { get; set; }
+
+        public string TestGuild { get; set; }
     }
 }

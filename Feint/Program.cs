@@ -1,6 +1,8 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 using Discord;
+using Discord.Commands;
+using Discord.Interactions;
 using Discord.WebSocket;
 using Feint.Core.Models;
 using Feint.Core.Services;
@@ -21,6 +23,8 @@ namespace Feint.Core
             // Setup default json config -- always set this up first.
             builder.ConfigureAppConfiguration((context, configBuilder) =>
             {
+                // config file for prefix YAML
+                //configBuilder.AddJsonFile("config.json", false, true);
                 configBuilder.AddJsonFile("secrets.json", false, true);
             });
 
@@ -48,11 +52,23 @@ namespace Feint.Core
             {
                 services.Configure<DiscordSettings>(context.Configuration.GetSection("Discord"));
 
-                services.AddSingleton(x => new DiscordSocketClient(new DiscordSocketConfig
+                services
+                .AddSingleton(x => new DiscordSocketClient(new DiscordSocketConfig
                 {
-                    GatewayIntents = GatewayIntents.AllUnprivileged,
+                    // AllUnprivileged (privileged intent is messages intent--> switched to all) 
+                    GatewayIntents = GatewayIntents.All,
                     AlwaysDownloadUsers = true
-                }));
+                }))
+
+                // adding in singletons
+
+                // ADD interaction service 
+                .AddSingleton(x => new InteractionService(x.GetRequiredService<DiscordSocketClient>()))
+                .AddSingleton<InteractionHandler>()
+
+                // prefix commands 
+                .AddSingleton(x => new CommandService())
+                .AddSingleton<PrefixHandler>();
 
                 // Let the host manage this service -- it controls the StartAsync, StopAsync, and ExecuteAsync.
                 // StartAsync is meant for setup.
