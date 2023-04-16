@@ -75,10 +75,10 @@ namespace Feint.Core.Services
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                logger.Information("EXECUTING ASYNC BODY");
+                //logger.Information("EXECUTING ASYNC BODY");
                 try
                 {
-                    logger.Information(settings.BotToken);
+                    //logger.Information(settings.BotToken);
                     await Task.Delay(1000, stoppingToken);
                 }
                 catch (Exception ex)
